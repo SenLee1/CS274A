@@ -67,8 +67,127 @@ def mapping_function(example: dict) -> dict:
     """
 
     """YOUR CODE HERE"""
-    util.raiseNotDefined()
+    #  1. Check whether the given action sequence is a valid sequence to generate a legal parse tree. If it is invalid, please raise an InvalidTreeError Exception.
+    answer_dict = {}
+    valid_OPT = ["NP", "VP", "S", "PP", "ADJP", "ADVP", "PP", "SBAR", "WHNP", "INTJ", "FRAG","UCP", "PRN","SBARQ", "SQ","QP", "<unk>","WHADVP","PRT","WHADJP","WHPP","CONJP"]
+    def invalid_tree(actions):
+        open_ts = []
+        noterminals = True
+        if actions[1][1:] not in valid_OPT:
+            #  print(111111)
+            return True
+        for act in actions:
+            if act == '<s>' or act == '</s>':
+                continue
+            if act.startswith('('):
+                if act[1:] not in valid_OPT:
+                    #  print(222222222)
+                    return True
+                open_ts.append(act[1:])
+                noterminals = True
+            elif act.endswith(')'):
+                # Close a nonterminal
+                if not open_ts or act[:-1] != open_ts[-1]:
+                    #  print(3333333333)
+                    return True
+                elif noterminals:
+                    #  print(44444444444444)
+                    return True
+                else:
+                    open_ts.pop()
+            else:
+                noterminals = False
+        if not open_ts:
+            return False
+        else:
+            #  print(555555555555555)
+            return True
 
+
+    if invalid_tree(example["actions"]):
+        print(example["actions"])
+        raise InvalidTreeError("The action sequence is invalid to generate a legal parse tree.")
+
+
+    #  2. The processed input: a list of strings. It should duplicate all closing nonterminals in the given action sequence.
+    #  3. The processed output: a list of strings. It should insert '<pad>' after all closing nonterminals in the given action sequence.
+    actions = example["actions"]
+    inputs = []
+    labels = []
+    j = 1
+    for act in actions:
+        inputs.append(act)
+        labels.append(act)
+        if act.endswith(')'):
+            inputs.append(act)
+            labels.append('<pad>')
+
+    #  4. The absolute positions: a list of integers. The absolute position of each token is defined as the depth of it in the tree.
+    position_ids = []
+    length = len(inputs)
+    current_depth = 0
+    for i in range(length):
+        if i == 0 or i == length - 1:
+            position_ids.append(0)
+            continue
+        if i==1 or i==len(labels)-2:
+            position_ids.append(0)
+            current_depth +=1
+            continue
+        if labels[i][0]=='(':
+            position_ids.append(current_depth)
+            current_depth += 1
+        elif labels[i][-1]==')':
+            current_depth -= 1
+            position_ids.append(current_depth)
+        else:
+            position_ids.append(current_depth)
+
+    #  5. The attention mask: a 2d torch tensor. This is the attention mask with STACK/COMPOSE attention. The attention mask of '</s>' is all 0s.
+    attention_mask = torch.tril(torch.ones(length,length,dtype=torch.float))
+    open_term = []
+    #  close_term = []
+    open_close_pair = []
+    pad_term = []
+    for i in range(length):
+        if labels[i][0] == '(':
+            open_term.append(i)
+        elif labels[i][-1] == ')':
+            open_close_pair.append((open_term[-1], i))
+            open_term.pop()
+        elif labels[i] == '<pad>':
+            pad_term.append(i)
+
+    # pad 下面每一行置为0
+    len_pad = len(pad_term)
+    for i in range(len_pad):
+        attention_mask[pad_term[i]+1:,pad_term[i]] = 0
+
+    for ont, cnt in open_close_pair:
+        # Close 那一行open terminal之前置为0
+        attention_mask[cnt,:ont] = 0
+        # 该Open-Close对下面的所有行置为0
+        attention_mask[cnt+1:length,ont:cnt] = 0
+
+    #  for i in range(len(open_term)):
+    #      for j in range(len(close_term)):
+    #          if open_term[i][1][1:] == close_term[j][1][:-1]:
+    #              # Close 那一行open terminal之前置为0
+    #              for k in range(open_term[i][0]):
+    #                  attention_mask[close_term[j][0],k] = 0
+    #              # 该Open-Close对下面的所有行置为0
+    #              for k in range(close_term[j][0] + 1, len(answer_dict["labels"])):
+    #                  for l in range(open_term[i][0], close_term[j][0]):
+    #                      attention_mask[k,l] = 0
+    #              break
+    # 确保最后一行全0
+    attention_mask[-1, :] = 0
+
+    answer_dict["inputs"] = inputs
+    answer_dict["labels"] = labels
+    answer_dict["position_ids"] = position_ids
+    answer_dict["attention_mask"] = attention_mask
+    return answer_dict
 
 def get_trainer(
     tokenizer: PreTrainedTokenizerFast,
@@ -133,7 +252,30 @@ def get_trainer(
         return batch
 
     """YOUR CODE HERE"""
-    util.raiseNotDefined()
+    training_args = TrainingArguments(
+        output_dir="./results",  
+        learning_rate=6e-5,                        
+        per_device_train_batch_size=4,             
+        num_train_epochs=3,                        
+        weight_decay=0.01,                         
+    )
+    #  training_args = TrainingArguments(
+    #      output_dir="./results",
+    #      evaluation_strategy="epoch",
+    #      learning_rate=2e-5,
+    #      per_device_train_batch_size=16,
+    #      per_device_eval_batch_size=16,
+    #      num_train_epochs=3,
+    #      weight_decay=0.01,
+    #  )
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        data_collator=data_collator,
+    )
+    return trainer
+    #  util.raiseNotDefined()
 
 
 def main():

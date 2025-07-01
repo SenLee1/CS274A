@@ -34,6 +34,7 @@ import tokenizers.decoders
 from transformers import pipeline
 import datasets
 import torch
+torch.set_printoptions(threshold=float('inf'))
 
 
 # Simple test case which evals an arbitrary piece of python code.
@@ -654,8 +655,12 @@ class PreProcessingTest(testClasses.TestCase):
                 grades.addMessage("FAIL: %s" % self.path)
                 grades.addMessage("\tWrong attention mask.")
                 grades.addMessage('\taction sequence: "{}"'.format(action))
-                grades.addMessage('\t        student: "{}"'.format(output["attention_mask"]))
-                grades.addMessage('\t        correct: "{}"'.format(att_mask))
+                #  grades.addMessage('\t        student: "{}"'.format(output["attention_mask"]))
+                print("Student:",output["attention_mask"])
+                #  grades.addMessage('\t        student: "{}"'.format(output["attention_mask"]))
+                #  grades.addMessage('\t        correct: "{}"'.format(att_mask))
+                print("Correct:",att_mask)
+                #  grades.addMessage('\t        correct: "{}"'.format(att_mask))
                 return False
 
         grades.addMessage("PASS: %s" % self.path)
